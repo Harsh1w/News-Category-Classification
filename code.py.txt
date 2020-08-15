@@ -1,0 +1,201 @@
+from google.colab import files
+
+import numpy as np
+np.random.seed(0)
+from keras.models import Model
+from keras.layers import Dense, Input, Dropout, LSTM, Activation
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+from keras.initializers import glorot_uniform
+np.random.seed(1)
+!pip install -q kaggle
+uploaded = files.upload()
+for fn in uploaded.keys():
+  print('User uploaded file "{name}" with length {length} bytes'.format(
+      name=fn, length=len(uploaded[fn])))
+
+import io
+import json
+import pandas as pd
+use=(io.StringIO(uploaded['news_train.json'].decode('utf-8'))).read()
+data1 = use.split('\n')
+
+#merging data1 and data2
+
+data = data1[:136000]
+data_Len = len(data)
+print(len(data))
+
+load_data = []
+for i in range(data_Len-1):
+   
+    a = json.loads(data[i])
+    temp = a["headline"]+a["short_description"]
+    load_data.append(temp)
+    a.clear()
+
+load_labels = []
+for i in range(136000):
+   
+    a = json.loads(data1[i])
+    temp = a["category"]
+    load_labels.append(temp)
+    a.clear()
+
+
+
+unique =   np.unique(load_labels) 
+
+unique = unique.tolist()
+for i in range(136000):
+   load_labels[i] = unique.index(load_labels[i])
+sample = len(unique)
+
+load_labels = np.asarray(load_labels)    
+
+import string
+for i in range(data_Len-1):
+    load_data[i] = load_data[i].translate(str.maketrans('', '', string.punctuation))
+    
+
+import keras
+Tokenizer=keras.preprocessing.text.Tokenizer
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(load_data)
+sequences = tokenizer.texts_to_sequences(load_data)
+
+print(len(sequences[0]))
+print(len(data))
+
+vocab_size = len(tokenizer.word_index) + 1
+print(vocab_size)
+max_Len =len( max(sequences,key = len))
+padded = np.zeros([data_Len, max_Len],dtype=int)
+for i in range(data_Len-1):
+  temp = len(sequences[i])
+  for j in range(temp):
+    padded[i][j] = sequences[i][j]
+ maXlen = len(max(sequences,key = len))
+print(maXlen)
+max_len = len(max(load_data,key = len))
+print(max_len)
+import tensorflow as tf
+
+y = tf.keras.utils.to_categorical(load_labels, num_classes=sample)
+
+print(y[1])
+print(len(padded[1]))
+import keras
+z=keras.layers.Embedding
+Sequential = keras.Sequential
+model = Sequential()
+model.add(Embedding(vocab_size, 50, input_length=maXlen))
+model.add(LSTM(100))
+
+
+model.add(Dense(sample, activation='softmax'))
+print(model.summary())
+
+opti = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+from sklearn.utils import shuffle
+padded ,y =shuffle(padded,y)
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+# fit model
+model.fit(padded, y, batch_size=128, epochs=70)
+!pip install -U -q PyDrive
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive 
+from google.colab import auth 
+from oauth2client.client import GoogleCredentials
+
+import json
+
+# save the model to file
+model.save('model.h5')
+model_file = drive.CreateFile({'title' : 'model.h5'})                       
+model_file.SetContentFile('model.h5')                       
+model_file.Upload()
+tokenizer_json = tokenizer.to_json()
+with io.open('tokenizer.json', 'w', encoding='utf-8') as f:
+    f.write(json.dumps(tokenizer_json, ensure_ascii=False))
+test_data = data1[136000:]
+testlen = len(test_data)
+t_data = []
+for i in range(testlen-1):
+   
+    a = json.loads(test_data[i])
+    temp = a["headline"]+a["short_description"]
+    t_data.append(temp)
+    a.clear()
+import string
+for i in range(testlen-1):
+    t_data[i] = t_data[i].translate(str.maketrans('', '', string.punctuation))
+
+
+sequences = tokenizer.texts_to_sequences(t_data)   
+maLen =len( max(sequences,key = len))
+paddd = np.zeros([testlen-1, 244],dtype=int)
+for i in range(testlen-1):
+  temp = len(sequences[i])
+  for j in range(temp):
+    paddd[i][j] = sequences[i][j]
+test_labels = []
+for i in range(testlen-1):
+   
+    a = json.loads(test_data[i])
+    temp = a["category"]
+    test_labels.append(temp)
+    a.clear()
+
+for i in range(testlen-1):
+   test_labels[i] = unique.index(test_labels[i])
+
+
+test_labels = np.asarray(test_labels) 
+
+# model
+
+def Mdel(input_shape, word_to_vec_map, word_to_index):
+    
+    sentence_indices = Input(input_shape, dtype='int32')
+    
+    
+    embedding_layer = pretrained_embedding_layer(word_to_vec_map, word_to_index)
+    
+  
+    embeddings = embedding_layer(sentence_indices)   
+    
+   
+    X = LSTM(128, return_sequences=True)(embeddings)
+   
+    X = Dropout(0.5)(X)
+    
+    X = LSTM(128, return_sequences=False)(X)
+    
+    X = Dropout(0.5)(X)
+    
+    X = Dense(sample)(X)
+    
+    X = Activation('softmax')(X)
+    
+    
+    model = Model(inputs=sentence_indices, outputs=X)
+
+model = Mdel((max_Len,), word_to_vec_map, word_to_index)
+model.summary()
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+X_train_indices = sentences_to_indices(load_data, word_to_index, max_len)
+Y_train_oh = convert_to_one_hot(load_labls, C = sample)
+model.fit(X_train_indices, Y_train_oh, epochs = 50, batch_size = 32, shuffle=True)
+
+X_test_indices = sentences_to_indices(X_test, word_to_index, max_len = maxLen)
+Y_test_oh = convert_to_one_hot(Y_test, C = samples)
+loss, acc = model.evaluate(X_test_indices, Y_test_oh)
+print()
+print("Test accuracy = ", acc)
+    
+    
+    
+    return model
